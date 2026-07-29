@@ -2,6 +2,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from src.generation import generate_grounded_answer
 from src.ingestion import chunk_text, load_document
 from src.retrieval import (
     get_vector_collection,
@@ -20,14 +21,19 @@ def load_vector_collection():
 
 
 def save_uploaded_file(uploaded_file) -> Path:
-    """Save a Streamlit uploaded file inside the uploads folder."""
+    """Save an uploaded file inside the local uploads folder."""
 
-    UPLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    UPLOAD_DIRECTORY.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     safe_filename = Path(uploaded_file.name).name
     saved_path = UPLOAD_DIRECTORY / safe_filename
 
-    saved_path.write_bytes(uploaded_file.getbuffer())
+    saved_path.write_bytes(
+        uploaded_file.getbuffer()
+    )
 
     return saved_path
 
@@ -39,11 +45,18 @@ st.set_page_config(
 )
 
 st.title("Agentic RAG Knowledge Assistant")
+
 st.caption(
-    "Upload documents and retrieve relevant evidence using semantic search."
+    "Upload documents, retrieve relevant evidence, "
+    "and generate grounded answers using Gemini."
 )
 
 collection = load_vector_collection()
+
+
+# ---------------------------------------------------------
+# Document upload section
+# ---------------------------------------------------------
 
 st.subheader("1. Upload a document")
 
@@ -53,14 +66,25 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is not None:
-    st.write(f"Selected file: **{uploaded_file.name}**")
+    st.write(
+        f"Selected file: **{uploaded_file.name}**"
+    )
 
-    if st.button("Process document", type="primary"):
+    if st.button(
+        "Process document",
+        type="primary",
+    ):
         try:
-            with st.spinner("Processing document..."):
-                saved_file_path = save_uploaded_file(uploaded_file)
+            with st.spinner(
+                "Extracting text and creating embeddings..."
+            ):
+                saved_file_path = save_uploaded_file(
+                    uploaded_file
+                )
 
-                document_text = load_document(saved_file_path)
+                document_text = load_document(
+                    saved_file_path
+                )
 
                 chunks = chunk_text(
                     document_text,
@@ -80,15 +104,26 @@ if uploaded_file is not None:
             )
 
         except Exception as error:
-            st.error(f"Document processing failed: {error}")
+            st.error(
+                f"Document processing failed: {error}"
+            )
+
 
 st.divider()
 
-st.subheader("2. Search the knowledge base")
+
+# ---------------------------------------------------------
+# Question and answer section
+# ---------------------------------------------------------
+
+st.subheader("2. Ask a question")
 
 question = st.text_input(
     "Ask a question about the uploaded documents",
-    placeholder="Example: How should employees protect their accounts?",
+    placeholder=(
+        "Example: How should employees "
+        "protect their company accounts?"
+    ),
 )
 
 number_of_results = st.slider(
@@ -98,13 +133,20 @@ number_of_results = st.slider(
     value=3,
 )
 
-if st.button("Search knowledge base"):
+if st.button(
+    "Generate grounded answer",
+    type="primary",
+):
     if not question.strip():
-        st.warning("Enter a question before searching.")
+        st.warning(
+            "Enter a question before generating an answer."
+        )
 
     else:
         try:
-            with st.spinner("Searching for relevant evidence..."):
+            with st.spinner(
+                "Retrieving relevant evidence..."
+            ):
                 results = search_similar_chunks(
                     collection=collection,
                     question=question,
@@ -118,33 +160,49 @@ if st.button("Search knowledge base"):
                 )
 
             else:
-                st.success(
-                    f"Found {len(results)} relevant evidence chunks."
-                )
+                with st.spinner(
+                    "Generating a grounded answer with Gemini..."
+                ):
+                    answer = generate_grounded_answer(
+                        question=question,
+                        evidence_chunks=results,
+                    )
+
+                st.subheader("Answer")
+                st.markdown(answer)
+
+                st.subheader("Supporting evidence")
 
                 for position, result in enumerate(
                     results,
                     start=1,
                 ):
                     source = result["source"]
-                    chunk_number = result["chunk_index"] + 1
+                    chunk_number = (
+                        result["chunk_index"] + 1
+                    )
                     similarity = result["similarity"]
 
                     with st.expander(
-                        f"Result {position}: {source} "
+                        f"Source {position}: {source} "
                         f"— chunk {chunk_number}"
                     ):
                         st.write(result["text"])
+
                         st.write(
                             f"**Similarity score:** "
                             f"{similarity:.3f}"
                         )
 
         except Exception as error:
-            st.error(f"Search failed: {error}")
+            st.error(
+                f"Answer generation failed: {error}"
+            )
+
 
 st.divider()
 
 st.caption(
-    f"Stored chunks currently available: {collection.count()}"
+    f"Stored chunks currently available: "
+    f"{collection.count()}"
 )

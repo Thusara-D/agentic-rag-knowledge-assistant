@@ -53,6 +53,12 @@ st.caption(
 
 collection, agent_graph = load_application_resources()
 
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+if st.button("Clear chat history"):
+    st.session_state.chat_history = []
+    st.rerun()
 
 # ---------------------------------------------------------
 # Document upload
@@ -116,6 +122,23 @@ st.divider()
 # Agentic question answering
 # ---------------------------------------------------------
 
+if st.session_state.chat_history:
+    st.subheader("Conversation history")
+
+    for chat_item in st.session_state.chat_history:
+        with st.chat_message("user"):
+            st.markdown(chat_item["question"])
+
+        with st.chat_message("assistant"):
+            st.markdown(chat_item["answer"])
+
+            if chat_item["verified"]:
+                st.caption("Answer passed evidence verification.")
+            else:
+                st.caption("Answer was not fully verified.")
+
+    st.divider()
+
 st.subheader("2. Ask a question")
 
 question = st.text_input(
@@ -159,6 +182,17 @@ if st.button(
                 "evidence_chunks",
                 [],
             )
+
+            st.session_state.chat_history.append(
+    {
+        "question": question,
+        "answer": final_answer,
+        "verified": result.get(
+            "verification_passed",
+            False,
+        ),
+    }
+)
 
             st.subheader("Final answer")
             st.markdown(final_answer)

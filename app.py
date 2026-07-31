@@ -2,22 +2,22 @@ from pathlib import Path
 
 import streamlit as st
 
-from src.generation import generate_grounded_answer
+from src.graph import build_agent_graph
 from src.ingestion import chunk_text, load_document
-from src.retrieval import (
-    get_vector_collection,
-    search_similar_chunks,
-    store_chunks,
-)
+from src.retrieval import get_vector_collection, store_chunks
 
 
 UPLOAD_DIRECTORY = Path("uploads")
 
 
 @st.cache_resource
-def load_vector_collection():
-    """Create the Chroma collection once and reuse it."""
-    return get_vector_collection()
+def load_application_resources():
+    """Create the Chroma collection and LangGraph workflow once."""
+
+    collection = get_vector_collection()
+    agent_graph = build_agent_graph(collection)
+
+    return collection, agent_graph
 
 
 def save_uploaded_file(uploaded_file) -> Path:
@@ -47,15 +47,15 @@ st.set_page_config(
 st.title("Agentic RAG Knowledge Assistant")
 
 st.caption(
-    "Upload documents, retrieve relevant evidence, "
-    "and generate grounded answers using Gemini."
+    "Upload documents and receive evidence-grounded answers "
+    "that are automatically verified and corrected."
 )
 
-collection = load_vector_collection()
+collection, agent_graph = load_application_resources()
 
 
 # ---------------------------------------------------------
-# Document upload section
+# Document upload
 # ---------------------------------------------------------
 
 st.subheader("1. Upload a document")
@@ -113,7 +113,7 @@ st.divider()
 
 
 # ---------------------------------------------------------
-# Question and answer section
+# Agentic question answering
 # ---------------------------------------------------------
 
 st.subheader("2. Ask a question")
@@ -134,60 +134,90 @@ number_of_results = st.slider(
 )
 
 if st.button(
-    "Generate grounded answer",
+    "Run Agentic RAG",
     type="primary",
 ):
     if not question.strip():
         st.warning(
-            "Enter a question before generating an answer."
+            "Enter a question before running the agent."
         )
 
     else:
         try:
             with st.spinner(
-                "Retrieving relevant evidence..."
+                "Retrieving, generating, and verifying the answer..."
             ):
-                results = search_similar_chunks(
-                    collection=collection,
-                    question=question,
-                    number_of_results=number_of_results,
+                result = agent_graph.invoke(
+                    {
+                        "question": question,
+                        "number_of_results": number_of_results,
+                    }
                 )
 
-            if not results:
+            final_answer = result["final_answer"]
+            evidence_chunks = result.get(
+                "evidence_chunks",
+                [],
+            )
+
+            st.subheader("Final answer")
+            st.markdown(final_answer)
+
+            if result.get("verification_passed", False):
+                st.success(
+                    "The answer passed evidence verification."
+                )
+
+            elif evidence_chunks:
                 st.warning(
-                    "The knowledge base is empty. "
-                    "Upload and process a document first."
+                    "The generated answer could not be fully "
+                    "verified and was rejected."
                 )
 
-            else:
-                with st.spinner(
-                    "Generating a grounded answer with Gemini..."
+            correction_attempts = result.get(
+                "correction_attempts",
+                0,
+            )
+
+            if correction_attempts > 0:
+                st.info(
+                    f"The agent performed "
+                    f"{correction_attempts} correction attempt."
+                )
+
+            verification_feedback = result.get(
+                "verification_feedback",
+                "",
+            )
+
+            if verification_feedback:
+                with st.expander(
+                    "Verification details"
                 ):
-                    answer = generate_grounded_answer(
-                        question=question,
-                        evidence_chunks=results,
+                    st.write(
+                        verification_feedback
                     )
 
-                st.subheader("Answer")
-                st.markdown(answer)
-
+            if evidence_chunks:
                 st.subheader("Supporting evidence")
 
-                for position, result in enumerate(
-                    results,
+                for position, evidence in enumerate(
+                    evidence_chunks,
                     start=1,
                 ):
-                    source = result["source"]
+                    source = evidence["source"]
                     chunk_number = (
-                        result["chunk_index"] + 1
+                        evidence["chunk_index"] + 1
                     )
-                    similarity = result["similarity"]
+                    similarity = evidence["similarity"]
 
                     with st.expander(
                         f"Source {position}: {source} "
                         f"— chunk {chunk_number}"
                     ):
-                        st.write(result["text"])
+                        st.write(
+                            evidence["text"]
+                        )
 
                         st.write(
                             f"**Similarity score:** "
@@ -196,7 +226,7 @@ if st.button(
 
         except Exception as error:
             st.error(
-                f"Answer generation failed: {error}"
+                f"Agent workflow failed: {error}"
             )
 
 

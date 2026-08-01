@@ -4,6 +4,10 @@ An AI-powered knowledge assistant that answers questions using information from 
 
 The system retrieves relevant document evidence, generates an answer using Google Gemini, verifies whether the answer is supported, and corrects or rejects unsupported responses through a LangGraph workflow.
 
+## Application Preview
+
+![Agentic RAG Knowledge Assistant interface](docs/images/application-interface.png)
+
 ## Project Overview
 
 Large Language Models can sometimes provide answers using general knowledge or generate unsupported information. This project reduces that problem using Retrieval-Augmented Generation, commonly known as RAG.

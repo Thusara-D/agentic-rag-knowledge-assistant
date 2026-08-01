@@ -161,3 +161,97 @@ def search_similar_chunks(
         )
 
     return retrieved_chunks
+
+def list_indexed_documents(
+    collection: Any,
+) -> list[dict[str, Any]]:
+    """Return indexed document names and their chunk counts."""
+
+    if collection.count() == 0:
+        return []
+
+    records = collection.get(
+        include=["metadatas"],
+    )
+
+    metadata_items = records.get("metadatas") or []
+    document_counts: dict[str, int] = {}
+
+    for metadata in metadata_items:
+        if not metadata:
+            continue
+
+        source = str(
+            metadata.get("source", "Unknown source")
+        )
+
+        document_counts[source] = (
+            document_counts.get(source, 0) + 1
+        )
+
+    documents = [
+        {
+            "source": source,
+            "chunk_count": chunk_count,
+        }
+        for source, chunk_count in document_counts.items()
+    ]
+
+    return sorted(
+        documents,
+        key=lambda item: item["source"].lower(),
+    )
+
+
+def delete_indexed_document(
+    collection: Any,
+    source: str,
+) -> int:
+    """Delete every stored chunk belonging to one document."""
+
+    cleaned_source = source.strip()
+
+    if not cleaned_source:
+        raise ValueError("Source name cannot be empty.")
+
+    records = collection.get(
+        where={
+            "source": cleaned_source,
+        },
+        include=["metadatas"],
+    )
+
+    chunk_ids = records.get("ids") or []
+
+    if not chunk_ids:
+        return 0
+
+    collection.delete(
+        ids=chunk_ids,
+    )
+
+    return len(chunk_ids)
+
+
+def clear_knowledge_base(
+    collection: Any,
+) -> int:
+    """Delete every stored chunk from the collection."""
+
+    if collection.count() == 0:
+        return 0
+
+    records = collection.get(
+        include=["metadatas"],
+    )
+
+    chunk_ids = records.get("ids") or []
+
+    if not chunk_ids:
+        return 0
+
+    collection.delete(
+        ids=chunk_ids,
+    )
+
+    return len(chunk_ids)

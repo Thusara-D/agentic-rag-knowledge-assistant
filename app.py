@@ -4,7 +4,14 @@ import streamlit as st
 
 from src.graph import build_agent_graph
 from src.ingestion import chunk_text, load_document
-from src.retrieval import get_vector_collection, store_chunks
+
+from src.retrieval import (
+    clear_knowledge_base,
+    delete_indexed_document,
+    get_vector_collection,
+    list_indexed_documents,
+    store_chunks,
+)
 
 
 UPLOAD_DIRECTORY = Path("uploads")
@@ -56,9 +63,120 @@ collection, agent_graph = load_application_resources()
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-if st.button("Clear chat history"):
-    st.session_state.chat_history = []
-    st.rerun()
+if "sidebar_message" not in st.session_state:
+    st.session_state.sidebar_message = ""
+
+with st.sidebar:
+    st.header("Knowledge Base")
+
+    if st.session_state.sidebar_message:
+        st.success(
+            st.session_state.sidebar_message
+        )
+        st.session_state.sidebar_message = ""
+
+    indexed_documents = list_indexed_documents(
+        collection
+    )
+
+    column_one, column_two = st.columns(2)
+
+    with column_one:
+        st.metric(
+            "Documents",
+            len(indexed_documents),
+        )
+
+    with column_two:
+        st.metric(
+            "Chunks",
+            collection.count(),
+        )
+
+    st.divider()
+
+    if indexed_documents:
+        st.subheader("Indexed documents")
+
+        for document in indexed_documents:
+            st.write(
+                f"**{document['source']}**"
+            )
+            st.caption(
+                f"{document['chunk_count']} stored chunk(s)"
+            )
+
+        document_names = [
+            document["source"]
+            for document in indexed_documents
+        ]
+
+        selected_document = st.selectbox(
+            "Select a document",
+            options=document_names,
+        )
+
+        if st.button(
+            "Delete selected document",
+            key="delete_selected_document",
+        ):
+            deleted_count = delete_indexed_document(
+                collection=collection,
+                source=selected_document,
+            )
+
+            # Remove answers that may refer to deleted evidence.
+            st.session_state.chat_history = []
+
+            st.session_state.sidebar_message = (
+                f"Deleted {selected_document} "
+                f"and {deleted_count} chunk(s)."
+            )
+
+            st.rerun()
+
+    else:
+        st.info(
+            "No documents are currently indexed."
+        )
+
+    st.divider()
+
+    if st.button(
+        "Clear chat history",
+        key="clear_chat_history_sidebar",
+    ):
+        st.session_state.chat_history = []
+
+        st.session_state.sidebar_message = (
+            "Chat history cleared."
+        )
+
+        st.rerun()
+
+    confirm_clear = st.checkbox(
+        "I understand that all indexed documents "
+        "will be removed."
+    )
+
+    if st.button(
+        "Clear knowledge base",
+        type="primary",
+        disabled=not confirm_clear,
+        key="clear_knowledge_base",
+    ):
+        deleted_count = clear_knowledge_base(
+            collection
+        )
+
+        st.session_state.chat_history = []
+
+        st.session_state.sidebar_message = (
+            f"Knowledge base cleared. "
+            f"{deleted_count} chunk(s) were removed."
+        )
+
+        st.rerun()
 
 # ---------------------------------------------------------
 # Document upload

@@ -555,7 +555,7 @@ Manually confirm:
 - [x] Knowledge-base management
 - [x] Automated testing
 - [x] Professional project documentation
-- [ ] GitHub Actions
+- [x] GitHub Actions
 - [x] Application screenshots
 - [ ] Demonstration video
 - [ ] Online deployment

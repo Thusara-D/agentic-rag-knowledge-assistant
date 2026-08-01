@@ -556,7 +556,7 @@ Manually confirm:
 - [x] Automated testing
 - [x] Professional project documentation
 - [ ] GitHub Actions
-- [ ] Application screenshots
+- [x] Application screenshots
 - [ ] Demonstration video
 - [ ] Online deployment
 
